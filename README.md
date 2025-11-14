@@ -23,7 +23,7 @@
 
    | コマンド | 例 | 説明 |
    |----------|----|------|
-   | `add` | `add -n train --venv C:\venvs\ml --env CUDA_VISIBLE_DEVICES=0 -- python train.py --epochs 10` | ジョブを追加します。`--` 以降が実行コマンドです。`-n/--name` で表示名、`-c/--cwd` でワーキングディレクトリ、`--venv` で仮想環境のパス、`-e/--env` で環境変数 (`KEY=VALUE`) を指定できます。複数の `-e` を指定可能です。 |
+   | `add` | `add -n train --env CUDA_VISIBLE_DEVICES=0 -- python train.py --epochs 10` | ジョブを追加します。`--` 以降が実行コマンドです。`-n/--name` で表示名、`-c/--cwd` でワーキングディレクトリ、`-e/--env` で環境変数 (`KEY=VALUE`) を指定できます。複数の `-e` を指定可能です。 |
    | `list` | `list` | キュー内のジョブと現在実行中のジョブを表示します。 |
    | `history` | `history -n 5` | 最近完了したジョブの履歴を表示します。`-n` で件数を指定可能です。 |
    | `exit` / `quit` | `exit` | マネージャを終了します。 |
@@ -38,7 +38,6 @@
 ### 注意点
 
 - `add` コマンドで実行するコマンドは、Windows PowerShell/コマンドプロンプトで動作する形式で指定してください。
-- `--venv` に仮想環境を指定した場合、`PATH` と `VIRTUAL_ENV` を上書きして実行します。コマンドの先頭が `python` / `python.exe` のときは仮想環境内のPythonに自動で置き換わります。
 - 強制終了したい場合は、`Ctrl+C` でマネージャを終了できます。実行中ジョブの停止は対象プロセスに依存します。
 
 ## 開発

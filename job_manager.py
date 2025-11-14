@@ -14,7 +14,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 LOG_DIR = Path("logs")
@@ -62,16 +62,12 @@ class Job:
     name: str = field(default_factory=lambda: "Job")
     cwd: Optional[Path] = None
     env: Optional[Dict[str, str]] = None
-    venv: Optional[Path] = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: float = field(default_factory=time.time)
 
     def __str__(self) -> str:
         cmd = " ".join(shlex.quote(part) for part in self.command)
-        details = f"{self.name} ({self.id}) -> {cmd}"
-        if self.venv:
-            details += f" [venv={self.venv}]"
-        return details
+        return f"{self.name} ({self.id}) -> {cmd}"
 
 
 class JobStatus(enum.Enum):
@@ -88,33 +84,6 @@ class JobResult:
     return_code: Optional[int] = None
     log_file: Optional[Path] = None
     error_message: Optional[str] = None
-
-
-def prepare_command(job: Job) -> Tuple[List[str], Dict[str, str]]:
-    """Prepare the command and environment for execution.
-
-    When a virtual environment is specified, the PATH and VIRTUAL_ENV variables
-    are adjusted so the job runs inside the desired environment. If the command
-    starts with ``python`` it is replaced with the interpreter from the
-    environment for clarity.
-    """
-
-    command = list(job.command)
-    env = os.environ.copy()
-    if job.env:
-        env.update(job.env)
-
-    if job.venv:
-        scripts_dir = job.venv / ("Scripts" if os.name == "nt" else "bin")
-        python_name = "python.exe" if os.name == "nt" else "python"
-        python_executable = scripts_dir / python_name
-        env["VIRTUAL_ENV"] = str(job.venv)
-        existing_path = env.get("PATH", "")
-        env["PATH"] = str(scripts_dir) + (os.pathsep + existing_path if existing_path else "")
-        if command and Path(command[0]).name in {"python", "python.exe"}:
-            command[0] = str(python_executable)
-
-    return command, env
 
 
 class JobRunner(threading.Thread):
@@ -154,15 +123,14 @@ class JobRunner(threading.Thread):
         if sys.platform.startswith("win"):
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
         try:
-            command, env = prepare_command(job)
             with log_file.open("w", encoding="utf-8", errors="replace") as log_fp:
                 log_fp.write(f"Job: {job}\n")
                 log_fp.write("=" * 80 + "\n")
                 log_fp.flush()
                 process = subprocess.Popen(
-                    command,
+                    job.command,
                     cwd=str(job.cwd) if job.cwd else None,
-                    env=env,
+                    env={**os.environ, **(job.env or {})},
                     stdout=log_fp,
                     stderr=subprocess.STDOUT,
                     creationflags=creationflags,
@@ -229,7 +197,6 @@ class JobManagerApp:
         name: Optional[str] = None,
         cwd: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
-        venv: Optional[str] = None,
     ) -> Job:
         command = shlex.split(command_line)
         if not command:
@@ -239,7 +206,6 @@ class JobManagerApp:
             name=name or command[0],
             cwd=Path(cwd) if cwd else None,
             env=env,
-            venv=Path(venv) if venv else None,
         )
         self.job_queue.put(job)
         logging.info("Queued job %s", job)
@@ -313,7 +279,6 @@ class InteractiveShell(threading.Thread):
             parser.add_argument("-n", "--name", dest="name")
             parser.add_argument("-c", "--cwd", dest="cwd")
             parser.add_argument("-e", "--env", action="append", default=[], help="Environment variable KEY=VALUE")
-            parser.add_argument("--venv", dest="venv", help="Path to a virtual environment to use")
             try:
                 ns, command_tokens = parser.parse_known_args(rest)
             except SystemExit:
@@ -329,13 +294,7 @@ class InteractiveShell(threading.Thread):
                 key, value = item.split("=", 1)
                 env[key] = value
             cmd = " ".join(command_tokens)
-            job = self.app.add_job(
-                cmd,
-                name=ns.name,
-                cwd=ns.cwd,
-                env=env or None,
-                venv=ns.venv,
-            )
+            job = self.app.add_job(cmd, name=ns.name, cwd=ns.cwd, env=env or None)
             print(f"Queued: {job}")
             return
         if command == "list":
